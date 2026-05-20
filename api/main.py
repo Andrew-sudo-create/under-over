@@ -63,3 +63,18 @@ def ingestion_status() -> dict:
         "last_run": _last_ingestion_result,
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@app.get(f"{settings.api_prefix}/ingestion/summary")
+def ingestion_summary() -> dict:
+    if _last_ingestion_result is None:
+        return {
+            "status": "idle",
+            "summary": None,
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        }
+    return {
+        "status": "ready",
+        "summary": _last_ingestion_result.get("quality_summary"),
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }

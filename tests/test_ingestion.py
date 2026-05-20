@@ -14,3 +14,5 @@ def test_run_ingestion_sample_mode_dry_run() -> None:
     assert result.processed_count == 1
     assert result.written_count == 0
     assert result.errors == []
+    assert result.quality_summary["missing_critical_count"] == 0
+    assert result.quality_summary["parse_failure_count"] == 0

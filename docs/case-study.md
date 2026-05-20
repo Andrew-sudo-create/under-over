@@ -149,6 +149,44 @@ Move from isolated ingestion helpers to a reusable ingestion workflow that can r
 
 ---
 
+## Day 4 - Ingestion Quality Metrics and Summary Endpoint
+
+### Objective
+Add quality checks to ingestion outputs so each run reports data completeness and failure metrics, not just record counts.
+
+### Actions Taken
+- Extended `IngestionResult` with a `quality_summary` payload.
+- Added quality metrics in ingestion orchestration:
+  - duplicate discovered URLs
+  - missing critical fields (city, suburb, property type, asking price)
+  - parse/listing failure counts
+- Added API endpoint `GET /api/v1/ingestion/summary` for quick monitoring.
+- Updated tests to assert quality metrics and summary endpoint behavior.
+- Updated README to include summary endpoint usage.
+
+### Technical Decisions
+- Decision: compute quality metrics in the ingestion layer, then expose via API.
+- Reason: keeps monitoring consistent across script and API-triggered runs.
+- Tradeoff: metrics are currently scoped to latest run in memory, not persisted historically yet.
+
+### Results
+- Output: ingestion runs now include structured quality telemetry.
+- Metrics: 9 automated tests passing locally.
+- Quality check: summary endpoint returns expected processed and missing-critical counts.
+
+### Challenges
+- Needed metrics that are useful immediately without introducing extra DB tables.
+- Balanced minimal implementation with future extensibility.
+
+### What I Learned
+- Basic quality telemetry quickly surfaces ingestion regressions before model training.
+- A dedicated summary endpoint makes operational checks straightforward.
+
+### Next Milestone
+- Build Day 5: persist ingestion run history and expose trend view across runs.
+
+---
+
 ## Entry Template
 
 Copy this section for each new day or milestone:

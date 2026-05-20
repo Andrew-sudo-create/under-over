@@ -59,3 +59,5 @@ Notes:
   - `POST /api/v1/ingestion/run` with `{"sample_mode": true}`
 - Check last ingestion status:
   - `GET /api/v1/ingestion/status`
+- Check latest ingestion quality summary:
+  - `GET /api/v1/ingestion/summary`
