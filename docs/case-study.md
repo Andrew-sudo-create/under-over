@@ -226,6 +226,123 @@ Persist ingestion run metadata to Postgres and expose a trend view so data-quali
 
 ---
 
+## Day 6 - DB-backed Data Quality Report
+
+### Objective
+Expose DB-level data quality metrics to evaluate listing completeness and city coverage after ingestion runs.
+
+### Actions Taken
+- Added `db/quality.py` to compute:
+  - total normalized rows
+  - missing rates for city/suburb/property_type/asking_price
+  - top city coverage with missing-price counts
+- Added API endpoint:
+  - `GET /api/v1/data-quality/report`
+- Added API test for report endpoint using mocked quality data.
+- Updated README with quality report endpoint reference.
+
+### Technical Decisions
+- Decision: compute quality in SQL against `listings_normalized` rather than in-memory run payloads.
+- Reason: reflects actual persisted state used by downstream modeling.
+- Tradeoff: endpoint depends on DB availability and schema bootstrap completion.
+
+### Results
+- Output: operator-friendly quality report endpoint for post-ingestion verification.
+- Metrics: expanded automated API test coverage.
+- Quality check: endpoint response shape validated in tests.
+
+### Challenges
+- Needed to avoid coupling quality report logic to ingestion-memory state.
+- Ensured graceful API error response when DB is unavailable.
+
+### What I Learned
+- Persistent table-level metrics are more reliable for training readiness checks.
+- Small quality dashboards create a clear “go/no-go” gate before model training.
+
+### Next Milestone
+- Harden scraper parsing and retry behavior for better real-world resilience.
+
+---
+
+## Day 7 - Scraper Hardening (Retries, Pagination, Richer Parsing)
+
+### Objective
+Increase scraper robustness and extraction fidelity so live dry-run tests are meaningful and stable.
+
+### Actions Taken
+- Enhanced compliance guard:
+  - retry with exponential backoff on `429/5xx`
+  - centralized guarded `get(...)` method
+- Upgraded Property24 adapter:
+  - paginated URL discovery (`Page` query parameter)
+  - reusable HTML listing-url extraction
+  - richer JSON-LD extraction (price, identifiers, bedrooms, bathrooms, sizes, date, address)
+  - fallback location parsing from title when city/suburb missing
+- Added fixture-based parser tests for:
+  - search page URL extraction
+  - listing page payload extraction
+
+### Technical Decisions
+- Decision: test parser logic with HTML fixtures to reduce live-network test fragility.
+- Reason: deterministic tests speed up iteration and prevent false negatives from network volatility.
+- Tradeoff: fixture tests must be updated when site markup meaningfully changes.
+
+### Results
+- Output: resilient discovery + extraction path suitable for initial production dry runs.
+- Metrics: broader parser-focused test coverage added.
+- Quality check: fixture-based assertions verify key fields extraction end-to-end.
+
+### Challenges
+- Needed balanced parsing that is tolerant to markup variation without overfitting.
+- Managed retry policy conservatively to keep compliance-first behavior.
+
+### What I Learned
+- A robust scraper is mostly defensive engineering, not just selectors.
+- JSON-LD is the highest signal source when available, with title fallbacks for gaps.
+
+### Next Milestone
+- Add one-command smoke testing and CI automation for scraper regression checks.
+
+---
+
+## Day 8 - Scraper Test Automation and CI Workflow
+
+### Objective
+Make scraper validation repeatable with one local command and automated CI checks.
+
+### Actions Taken
+- Added `scripts/test_scraper_pipeline.py` to run:
+  - unit tests
+  - sample dry-run ingestion
+  - optional live dry-run ingestion with search URL
+- Added GitHub Actions workflows:
+  - `.github/workflows/scraper-smoke.yml`
+  - `.github/workflows/daily-discovery-dry-run.yml`
+- Updated README with scraper smoke-test commands.
+
+### Technical Decisions
+- Decision: keep CI workflow dry-run only and DB-independent.
+- Reason: stable, low-friction verification in free-tier environments.
+- Tradeoff: persistence paths still require optional DB-enabled local tests.
+
+### Results
+- Output: scraper pipeline now has repeatable local and CI validation paths.
+- Metrics: regression detection capability improved through scheduled dry runs.
+- Quality check: workflow definitions and local smoke script align with project commands.
+
+### Challenges
+- Needed cross-platform-safe command execution for local smoke testing.
+- Kept scheduled dry-run URL configurable but simple for MVP.
+
+### What I Learned
+- Early automation dramatically reduces scraper maintenance risk.
+- Smoke testing every change is essential for scraper-heavy products.
+
+### Next Milestone
+- Execute end-to-end live dry-run and begin v1 scraper “done” validation checklist.
+
+---
+
 ## Entry Template
 
 Copy this section for each new day or milestone:

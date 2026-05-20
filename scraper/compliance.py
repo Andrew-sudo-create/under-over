@@ -15,6 +15,8 @@ class CompliancePolicy:
     min_delay_seconds: float = 1.0
     max_delay_seconds: float = 3.0
     timeout_seconds: float = 15.0
+    max_retries: int = 3
+    retry_base_delay_seconds: float = 1.0
 
 
 class ComplianceGuard:
@@ -51,3 +53,21 @@ class ComplianceGuard:
             headers={"User-Agent": self.policy.user_agent},
             follow_redirects=True,
         )
+
+    def get(self, client: httpx.Client, url: str) -> httpx.Response:
+        if not self.can_fetch(url):
+            raise PermissionError(f"robots.txt disallows scraping: {url}")
+
+        attempt = 0
+        while True:
+            attempt += 1
+            self.wait_with_jitter()
+            response = client.get(url)
+
+            should_retry = response.status_code in {429, 500, 502, 503, 504}
+            if not should_retry or attempt >= self.policy.max_retries:
+                response.raise_for_status()
+                return response
+
+            backoff = self.policy.retry_base_delay_seconds * (2 ** (attempt - 1))
+            time.sleep(backoff + random.uniform(0, 0.5))

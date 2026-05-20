@@ -63,3 +63,15 @@ Notes:
   - `GET /api/v1/ingestion/summary`
 - Check recent ingestion run trends (from DB):
   - `GET /api/v1/ingestion/trends?limit=10`
+- Check DB-backed data quality report:
+  - `GET /api/v1/data-quality/report`
+
+## Scraper pipeline test
+
+Run the full scraper smoke test:
+
+- `python scripts/test_scraper_pipeline.py`
+
+Run with a live search URL (dry-run fetch and parse):
+
+- `python scripts/test_scraper_pipeline.py --search-url "https://www.property24.com/for-sale/gauteng/1"`

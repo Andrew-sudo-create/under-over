@@ -51,3 +51,19 @@ def test_ingestion_trends_endpoint_with_mocked_runs(monkeypatch) -> None:
     assert payload["status"] == "ok"
     assert payload["count"] == 1
     assert payload["runs"][0]["source"] == "property24"
+
+
+def test_data_quality_report_endpoint_with_mocked_report(monkeypatch) -> None:
+    fake_report = {
+        "total_rows": 2,
+        "missing_rates": {"city_pct": 0.0},
+        "counts": {"missing_city_count": 0},
+        "by_city": [{"city": "Johannesburg", "listing_count": 2, "missing_price_count": 0}],
+    }
+    monkeypatch.setattr(main, "get_data_quality_report", lambda *_args, **_kwargs: fake_report)
+
+    response = client.get("/api/v1/data-quality/report")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["report"]["total_rows"] == 2

@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from api.config import settings
 from db.ingestion_runs import get_recent_ingestion_runs
+from db.quality import get_data_quality_report
 from scraper.ingestion import run_ingestion
 from scraper.property24 import Property24Adapter
 
@@ -98,5 +99,23 @@ def ingestion_trends(limit: int = 10) -> dict:
         "status": "ok",
         "runs": runs,
         "count": len(runs),
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get(f"{settings.api_prefix}/data-quality/report")
+def data_quality_report() -> dict:
+    try:
+        report = get_data_quality_report(settings.database_url)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "status": "error",
+            "message": f"failed_to_build_report: {exc}",
+            "report": None,
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        }
+    return {
+        "status": "ok",
+        "report": report,
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
