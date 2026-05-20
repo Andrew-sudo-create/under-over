@@ -24,7 +24,7 @@ Project progress is documented as an ongoing build log in:
 
 Each entry captures objectives, technical decisions, results, blockers, and next steps.
 
-## Day 1 quickstart
+## Quickstart
 
 1. Install dependencies:
    - `python -m pip install -r requirements.txt`
@@ -36,3 +36,26 @@ Each entry captures objectives, technical decisions, results, blockers, and next
 Health endpoint:
 
 - `GET /health`
+
+## Day 2 ingestion scaffold
+
+- Dry run sample ingestion:
+  - `python scripts/ingest_sample.py`
+- Write sample ingestion to Postgres:
+  - `python scripts/ingest_sample.py --write`
+
+Notes:
+
+- The Property24 adapter is currently a compliance-first starter.
+- `robots.txt` checks are enforced before discovery/fetch operations.
+
+## Day 3 orchestration and DB bootstrap
+
+- Apply schema to database:
+  - `python scripts/bootstrap_db.py`
+- Run live ingestion (dry-run):
+  - `python scripts/run_ingestion.py --search-url "<property-search-url>" --limit 3`
+- Run sample ingestion via API:
+  - `POST /api/v1/ingestion/run` with `{"sample_mode": true}`
+- Check last ingestion status:
+  - `GET /api/v1/ingestion/status`
