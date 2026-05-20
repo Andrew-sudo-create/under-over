@@ -1,9 +1,9 @@
 from fastapi.testclient import TestClient
 
-from api.main import app
+from api import main
 
 
-client = TestClient(app)
+client = TestClient(main.app)
 
 
 def test_ingestion_sample_run_endpoint() -> None:
@@ -39,3 +39,15 @@ def test_ingestion_summary_endpoint_after_sample_run() -> None:
     payload = response.json()
     assert payload["status"] == "ready"
     assert payload["summary"]["processed_count"] == 1
+
+
+def test_ingestion_trends_endpoint_with_mocked_runs(monkeypatch) -> None:
+    sample_runs = [{"id": 1, "source": "property24", "mode": "sample"}]
+    monkeypatch.setattr(main, "get_recent_ingestion_runs", lambda *_args, **_kwargs: sample_runs)
+
+    response = client.get("/api/v1/ingestion/trends?limit=5")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["count"] == 1
+    assert payload["runs"][0]["source"] == "property24"

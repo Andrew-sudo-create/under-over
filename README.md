@@ -61,3 +61,5 @@ Notes:
   - `GET /api/v1/ingestion/status`
 - Check latest ingestion quality summary:
   - `GET /api/v1/ingestion/summary`
+- Check recent ingestion run trends (from DB):
+  - `GET /api/v1/ingestion/trends?limit=10`

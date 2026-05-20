@@ -187,6 +187,45 @@ Add quality checks to ingestion outputs so each run reports data completeness an
 
 ---
 
+## Day 5 - Persisted Ingestion Run History and Trends API
+
+### Objective
+Persist ingestion run metadata to Postgres and expose a trend view so data-quality progress can be tracked over multiple runs.
+
+### Actions Taken
+- Extended schema with `ingestion_runs` table and `created_at` index.
+- Added `db/ingestion_runs.py` with:
+  - `save_ingestion_run(...)`
+  - `get_recent_ingestion_runs(...)`
+- Updated ingestion orchestrator to save each run result when DB-write mode is enabled.
+- Added new API endpoint:
+  - `GET /api/v1/ingestion/trends?limit=10`
+- Updated API tests to validate trends endpoint behavior using monkeypatching.
+- Updated README with trends endpoint usage.
+
+### Technical Decisions
+- Decision: persist run history only when `write_to_db=True`.
+- Reason: avoids forcing DB connectivity for dry-run/local exploration workflows.
+- Tradeoff: dry runs are still visible in memory status but not in persistent trend history.
+
+### Results
+- Output: ingestion quality telemetry now has a persistent historical record in DB mode.
+- Metrics: 10 automated tests passing locally.
+- Quality check: trends endpoint returns persisted runs and count metadata.
+
+### Challenges
+- Avoided import-cycle risk between ingestion orchestration and run-history persistence.
+- Ensured DB connection cleanup remains safe in all ingestion flow paths.
+
+### What I Learned
+- Persisting run-level telemetry early makes operational maturity and debugging easier later.
+- A trends endpoint is a simple but high-value observability primitive for ingestion pipelines.
+
+### Next Milestone
+- Build Day 6: add first data-quality report endpoint from DB tables (coverage by city/suburb, null-rate dashboard).
+
+---
+
 ## Entry Template
 
 Copy this section for each new day or milestone:

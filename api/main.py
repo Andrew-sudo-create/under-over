@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from api.config import settings
+from db.ingestion_runs import get_recent_ingestion_runs
 from scraper.ingestion import run_ingestion
 from scraper.property24 import Property24Adapter
 
@@ -76,5 +77,26 @@ def ingestion_summary() -> dict:
     return {
         "status": "ready",
         "summary": _last_ingestion_result.get("quality_summary"),
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get(f"{settings.api_prefix}/ingestion/trends")
+def ingestion_trends(limit: int = 10) -> dict:
+    safe_limit = min(max(limit, 1), 100)
+    try:
+        runs = get_recent_ingestion_runs(settings.database_url, limit=safe_limit)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "status": "error",
+            "message": f"failed_to_load_trends: {exc}",
+            "runs": [],
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    return {
+        "status": "ok",
+        "runs": runs,
+        "count": len(runs),
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }

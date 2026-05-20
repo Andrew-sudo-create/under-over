@@ -34,8 +34,27 @@ create table if not exists listing_price_history (
     captured_at timestamptz not null default now()
 );
 
+create table if not exists ingestion_runs (
+    id bigserial primary key,
+    source text not null,
+    mode text not null,
+    search_url text,
+    started_at timestamptz not null,
+    finished_at timestamptz not null,
+    discovered_count int not null,
+    processed_count int not null,
+    written_count int not null,
+    error_count int not null,
+    errors jsonb not null,
+    quality_summary jsonb not null,
+    created_at timestamptz not null default now()
+);
+
 create index if not exists idx_listings_normalized_city_suburb
     on listings_normalized (city, suburb);
 
 create index if not exists idx_listing_price_history_url_time
     on listing_price_history (listing_url, captured_at desc);
+
+create index if not exists idx_ingestion_runs_created_at
+    on ingestion_runs (created_at desc);

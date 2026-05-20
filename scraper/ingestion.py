@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import psycopg
 
 from api.config import settings
+from db.ingestion_runs import save_ingestion_run
 from db.persistence import persist_listing
 from scraper.base import ListingAdapter, NormalizedListing
 from scraper.sample_data import sample_raw_listing
@@ -82,29 +83,35 @@ def run_ingestion(
                         written_count += 1
                 except Exception as exc:  # noqa: BLE001
                     errors.append(f"listing_failed: {listing_url} -> {exc}")
+
+        quality_summary = _build_quality_summary(
+            discovered_urls=discovered_urls,
+            normalized_records=normalized_records,
+            errors=errors,
+        )
+
+        finished_at = datetime.now(timezone.utc)
+        result = IngestionResult(
+            source=adapter.source_name,
+            mode="sample" if sample_mode else "live",
+            started_at=started_at,
+            finished_at=finished_at,
+            search_url=search_url,
+            discovered_count=len(discovered_urls),
+            processed_count=processed_count,
+            written_count=written_count,
+            errors=errors,
+            quality_summary=quality_summary,
+        )
+
+        if conn is not None:
+            save_ingestion_run(conn, result)
+            conn.commit()
+
+        return result
     finally:
-        if conn:
+        if conn is not None and not conn.closed:
             conn.close()
-
-    quality_summary = _build_quality_summary(
-        discovered_urls=discovered_urls,
-        normalized_records=normalized_records,
-        errors=errors,
-    )
-
-    finished_at = datetime.now(timezone.utc)
-    return IngestionResult(
-        source=adapter.source_name,
-        mode="sample" if sample_mode else "live",
-        started_at=started_at,
-        finished_at=finished_at,
-        search_url=search_url,
-        discovered_count=len(discovered_urls),
-        processed_count=processed_count,
-        written_count=written_count,
-        errors=errors,
-        quality_summary=quality_summary,
-    )
 
 
 def _build_quality_summary(
