@@ -6,3 +6,4 @@ pytest
 httpx
 beautifulsoup4
 psycopg[binary]
+scrapegraph-py

@@ -10,6 +10,7 @@ from db.quality import get_data_quality_report
 from scraper.base import NormalizedListing, RawListing
 from scraper.ingestion import run_ingestion
 from scraper.property24 import Property24Adapter
+from scraper.property24_scrapegraph import Property24ScrapeGraphAdapter
 
 
 app = FastAPI(title=settings.app_name)
@@ -21,15 +22,18 @@ class IngestionRequest(BaseModel):
     limit: int = Field(default=5, ge=1, le=50)
     write_to_db: bool = False
     sample_mode: bool = False
+    backend: str = Field(default="html")
 
 
 class DiscoverRequest(BaseModel):
     search_url: str
     limit: int = Field(default=5, ge=1, le=50)
+    backend: str = Field(default="html")
 
 
 class ListingRequest(BaseModel):
     listing_url: str
+    backend: str = Field(default="html")
 
 
 @app.get("/health")
@@ -52,8 +56,12 @@ def ingestion_run(payload: IngestionRequest) -> dict:
             "message": "search_url is required unless sample_mode=true",
         }
 
+    try:
+        adapter = _build_adapter(payload.backend)
+    except ValueError as exc:
+        return {"status": "error", "message": str(exc)}
     result = run_ingestion(
-        Property24Adapter(),
+        adapter,
         search_url=payload.search_url,
         limit=payload.limit,
         write_to_db=payload.write_to_db,
@@ -134,8 +142,8 @@ def data_quality_report() -> dict:
 
 @app.post(f"{settings.api_prefix}/scraper/discover")
 def scraper_discover(payload: DiscoverRequest) -> dict:
-    adapter = Property24Adapter()
     try:
+        adapter = _build_adapter(payload.backend)
         urls = adapter.discover_listing_urls(payload.search_url, limit=payload.limit)
     except Exception as exc:  # noqa: BLE001
         return {
@@ -155,8 +163,8 @@ def scraper_discover(payload: DiscoverRequest) -> dict:
 
 @app.post(f"{settings.api_prefix}/scraper/fetch")
 def scraper_fetch(payload: ListingRequest) -> dict:
-    adapter = Property24Adapter()
     try:
+        adapter = _build_adapter(payload.backend)
         raw = adapter.fetch_listing(payload.listing_url)
     except Exception as exc:  # noqa: BLE001
         return {
@@ -173,8 +181,8 @@ def scraper_fetch(payload: ListingRequest) -> dict:
 
 @app.post(f"{settings.api_prefix}/scraper/normalize")
 def scraper_normalize(payload: ListingRequest) -> dict:
-    adapter = Property24Adapter()
     try:
+        adapter = _build_adapter(payload.backend)
         raw = adapter.fetch_listing(payload.listing_url)
         normalized = adapter.normalize_listing(raw)
     except Exception as exc:  # noqa: BLE001
@@ -220,3 +228,12 @@ def _critical_missing_fields(listing: NormalizedListing) -> list[str]:
     if not listing.property_type:
         missing.append("property_type")
     return missing
+
+
+def _build_adapter(backend: str) -> Property24Adapter:
+    normalized = backend.strip().lower()
+    if normalized in {"html", "http"}:
+        return Property24Adapter()
+    if normalized in {"scrapegraph", "sg"}:
+        return Property24ScrapeGraphAdapter()
+    raise ValueError(f"unsupported backend: {backend}. Expected one of: html, scrapegraph.")

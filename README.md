@@ -76,6 +76,20 @@ Run with a live search URL (dry-run fetch and parse):
 
 - `python scripts/test_scraper_pipeline.py --search-url "https://www.property24.com/for-sale/gauteng/1"`
 
+## ScrapeGraph backend (Property24)
+
+You can switch the scraper backend from HTML parsing (`html`, default) to ScrapeGraph (`scrapegraph`).
+
+Configure env vars:
+
+- `UNDER_OVER_SCRAPEGRAPH_API_KEY=<your-key>`
+- `UNDER_OVER_SCRAPEGRAPH_ENDPOINT=https://api.scrapegraphai.com/v1/smartscraper`
+- `UNDER_OVER_SCRAPEGRAPH_TIMEOUT_SECONDS=120`
+
+Run ingestion with ScrapeGraph:
+
+- `python scripts/run_ingestion.py --search-url "https://www.property24.com/for-sale/gauteng/1" --limit 3 --backend scrapegraph`
+
 ## Postman testing (real scraper functions)
 
 Start API:
@@ -90,13 +104,16 @@ Use these endpoints in Postman:
 
 - `POST /api/v1/scraper/discover`
   - body:
-    - `{"search_url":"https://www.property24.com/for-sale/gauteng/1","limit":5}`
+    - `{"search_url":"https://www.property24.com/for-sale/gauteng/1","limit":5,"backend":"html"}`
+    - `{"search_url":"https://www.property24.com/for-sale/gauteng/1","limit":5,"backend":"scrapegraph"}`
 - `POST /api/v1/scraper/fetch`
   - body:
-    - `{"listing_url":"https://www.property24.com/for-sale/..."}`
+    - `{"listing_url":"https://www.property24.com/for-sale/...","backend":"html"}`
+    - `{"listing_url":"https://www.property24.com/for-sale/...","backend":"scrapegraph"}`
 - `POST /api/v1/scraper/normalize`
   - body:
-    - `{"listing_url":"https://www.property24.com/for-sale/..."}`
+    - `{"listing_url":"https://www.property24.com/for-sale/...","backend":"html"}`
+    - `{"listing_url":"https://www.property24.com/for-sale/...","backend":"scrapegraph"}`
 - `POST /api/v1/ingestion/run`
   - sample dry-run:
     - `{"sample_mode":true,"write_to_db":false}`

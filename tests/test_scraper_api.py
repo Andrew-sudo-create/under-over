@@ -95,3 +95,28 @@ def test_scraper_normalize_rejects_search_page_url(monkeypatch) -> None:
     payload = response.json()
     assert payload["status"] == "error"
     assert "listing detail page URL" in payload["message"]
+
+
+def test_scraper_discover_uses_scrapegraph_backend(monkeypatch) -> None:
+    monkeypatch.setattr(main, "Property24ScrapeGraphAdapter", FakeAdapter)
+
+    response = client.post(
+        "/api/v1/scraper/discover",
+        json={"search_url": "https://example.com/search", "limit": 2, "backend": "scrapegraph"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "ok"
+    assert payload["source"] == "property24"
+    assert payload["count"] == 2
+
+
+def test_scraper_discover_rejects_invalid_backend() -> None:
+    response = client.post(
+        "/api/v1/scraper/discover",
+        json={"search_url": "https://example.com/search", "limit": 2, "backend": "invalid"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "error"
+    assert "unsupported backend" in payload["message"]

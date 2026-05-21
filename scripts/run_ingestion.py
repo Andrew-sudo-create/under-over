@@ -10,6 +10,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from scraper.ingestion import run_ingestion
 from scraper.property24 import Property24Adapter
+from scraper.property24_scrapegraph import Property24ScrapeGraphAdapter
 
 
 def main() -> None:
@@ -21,10 +22,21 @@ def main() -> None:
         action="store_true",
         help="Write normalized outputs to DB. Without this flag, run in dry-run mode.",
     )
+    parser.add_argument(
+        "--backend",
+        default="html",
+        choices=["html", "scrapegraph"],
+        help="Scraper backend to use.",
+    )
     args = parser.parse_args()
 
+    if args.backend == "scrapegraph":
+        adapter = Property24ScrapeGraphAdapter()
+    else:
+        adapter = Property24Adapter()
+
     result = run_ingestion(
-        Property24Adapter(),
+        adapter,
         search_url=args.search_url,
         limit=args.limit,
         write_to_db=args.write,
