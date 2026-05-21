@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from datetime import datetime, timezone
 
 from fastapi import FastAPI
@@ -6,6 +7,7 @@ from pydantic import BaseModel, Field
 from api.config import settings
 from db.ingestion_runs import get_recent_ingestion_runs
 from db.quality import get_data_quality_report
+from scraper.base import NormalizedListing, RawListing
 from scraper.ingestion import run_ingestion
 from scraper.property24 import Property24Adapter
 
@@ -19,6 +21,15 @@ class IngestionRequest(BaseModel):
     limit: int = Field(default=5, ge=1, le=50)
     write_to_db: bool = False
     sample_mode: bool = False
+
+
+class DiscoverRequest(BaseModel):
+    search_url: str
+    limit: int = Field(default=5, ge=1, le=50)
+
+
+class ListingRequest(BaseModel):
+    listing_url: str
 
 
 @app.get("/health")
@@ -119,3 +130,93 @@ def data_quality_report() -> dict:
         "report": report,
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@app.post(f"{settings.api_prefix}/scraper/discover")
+def scraper_discover(payload: DiscoverRequest) -> dict:
+    adapter = Property24Adapter()
+    try:
+        urls = adapter.discover_listing_urls(payload.search_url, limit=payload.limit)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "status": "error",
+            "message": f"discover_failed: {exc}",
+            "urls": [],
+        }
+
+    return {
+        "status": "ok",
+        "source": adapter.source_name,
+        "search_url": payload.search_url,
+        "count": len(urls),
+        "urls": urls,
+    }
+
+
+@app.post(f"{settings.api_prefix}/scraper/fetch")
+def scraper_fetch(payload: ListingRequest) -> dict:
+    adapter = Property24Adapter()
+    try:
+        raw = adapter.fetch_listing(payload.listing_url)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "status": "error",
+            "message": f"fetch_failed: {exc}",
+            "raw": None,
+        }
+    return {
+        "status": "ok",
+        "source": adapter.source_name,
+        "raw": _serialize_raw_listing(raw),
+    }
+
+
+@app.post(f"{settings.api_prefix}/scraper/normalize")
+def scraper_normalize(payload: ListingRequest) -> dict:
+    adapter = Property24Adapter()
+    try:
+        raw = adapter.fetch_listing(payload.listing_url)
+        normalized = adapter.normalize_listing(raw)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "status": "error",
+            "message": f"normalize_failed: {exc}",
+            "normalized": None,
+        }
+
+    missing_fields = _critical_missing_fields(normalized)
+    return {
+        "status": "ok",
+        "source": adapter.source_name,
+        "raw": _serialize_raw_listing(raw),
+        "normalized": _serialize_normalized_listing(normalized),
+        "missing_critical_fields": missing_fields,
+    }
+
+
+def _serialize_raw_listing(raw: RawListing) -> dict:
+    payload = asdict(raw)
+    payload["scraped_at"] = raw.scraped_at.isoformat()
+    return payload
+
+
+def _serialize_normalized_listing(listing: NormalizedListing) -> dict:
+    payload = asdict(listing)
+    for key in ("listed_at", "first_seen_at", "last_seen_at"):
+        value = payload.get(key)
+        if value is not None:
+            payload[key] = value.isoformat()
+    return payload
+
+
+def _critical_missing_fields(listing: NormalizedListing) -> list[str]:
+    missing: list[str] = []
+    if listing.asking_price is None:
+        missing.append("asking_price")
+    if not listing.city:
+        missing.append("city")
+    if not listing.suburb:
+        missing.append("suburb")
+    if not listing.property_type:
+        missing.append("property_type")
+    return missing

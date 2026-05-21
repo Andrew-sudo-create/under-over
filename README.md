@@ -75,3 +75,38 @@ Run the full scraper smoke test:
 Run with a live search URL (dry-run fetch and parse):
 
 - `python scripts/test_scraper_pipeline.py --search-url "https://www.property24.com/for-sale/gauteng/1"`
+
+## Postman testing (real scraper functions)
+
+Start API:
+
+- `python -m uvicorn api.main:app --reload`
+
+Base URL:
+
+- `http://127.0.0.1:8000`
+
+Use these endpoints in Postman:
+
+- `POST /api/v1/scraper/discover`
+  - body:
+    - `{"search_url":"https://www.property24.com/for-sale/gauteng/1","limit":5}`
+- `POST /api/v1/scraper/fetch`
+  - body:
+    - `{"listing_url":"https://www.property24.com/for-sale/..."}`
+- `POST /api/v1/scraper/normalize`
+  - body:
+    - `{"listing_url":"https://www.property24.com/for-sale/..."}`
+- `POST /api/v1/ingestion/run`
+  - sample dry-run:
+    - `{"sample_mode":true,"write_to_db":false}`
+  - live dry-run:
+    - `{"search_url":"https://www.property24.com/for-sale/gauteng/1","limit":3,"write_to_db":false}`
+- `GET /api/v1/ingestion/status`
+- `GET /api/v1/ingestion/summary`
+- `GET /api/v1/ingestion/trends?limit=10` (requires DB + schema applied)
+- `GET /api/v1/data-quality/report` (requires DB + schema applied)
+
+Prebuilt Postman collection:
+
+- `postman/under-over.postman_collection.json`

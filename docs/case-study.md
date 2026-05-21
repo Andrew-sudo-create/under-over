@@ -343,6 +343,84 @@ Make scraper validation repeatable with one local command and automated CI check
 
 ---
 
+## Day 9 - Postman-ready Scraper API Surface
+
+### Objective
+Expose scraper functions as explicit API endpoints so end-to-end function testing can be done from Postman with live URLs.
+
+### Actions Taken
+- Added scraper-focused API endpoints:
+  - `POST /api/v1/scraper/discover`
+  - `POST /api/v1/scraper/fetch`
+  - `POST /api/v1/scraper/normalize`
+- Added response serializers for raw and normalized listing payloads.
+- Added missing-critical-field reporting in normalize responses.
+- Added API tests for discover/fetch/normalize endpoints with mocked adapter behavior.
+- Updated README with Postman request bodies and endpoint list.
+
+### Technical Decisions
+- Decision: expose scrape functions independently before full ingestion run.
+- Reason: makes debugging in Postman easier by isolating discovery, fetch, and normalization stages.
+- Tradeoff: more API surface area to maintain, but significantly faster troubleshooting workflow.
+
+### Results
+- Output: Postman can now test each scraper stage directly with real listing/search URLs.
+- Metrics: test suite expanded with scraper API coverage.
+- Quality check: endpoint behavior validated with deterministic mocked tests.
+
+### Challenges
+- Needed safe serialization of dataclass + datetime fields for API output.
+- Ensured endpoint errors remain explicit and stage-specific.
+
+### What I Learned
+- Stage-level API testing shortens iteration loops for scraper debugging.
+- Field-level missing reports are valuable for parser quality tuning.
+
+### Next Milestone
+- Build a shared Postman collection JSON and add route-level examples for each endpoint.
+
+---
+
+## Day 10 - Live Parser Fix for Nested Listing Data
+
+### Objective
+Fix real-world extraction gaps where listing pages returned title-only payloads and missed price/type/room details.
+
+### Actions Taken
+- Updated JSON-LD parser to flatten `@graph` objects.
+- Added support for nested listing structures:
+  - `offers.priceSpecification.price`
+  - `about.@type`
+  - `about.numberOfBedrooms`
+  - `about.numberOfBathroomsTotal`
+  - `datePosted`
+- Added URL-based city/suburb extraction fallback for listing-detail URLs.
+- Added city selection rule to prefer URL city when extracted city is only a province value.
+- Added fixture tests for graph-based listing payloads and city/suburb URL parsing.
+
+### Technical Decisions
+- Decision: prioritize schema.org graph extraction before relying on UI text.
+- Reason: structured data is more stable and less brittle than scraping arbitrary DOM text.
+- Tradeoff: still requires fallback heuristics for fields not present in structured payloads.
+
+### Results
+- Output: real listing payload now includes price, type, bedrooms, bathrooms, listed date, and corrected city/suburb.
+- Metrics: test suite increased to 21 passing tests.
+- Quality check: live verification on `P24-115979763` now returns `asking_price=540000`, `property_type=House`, `city=Brakpan`.
+
+### Challenges
+- Needed to distinguish suburb/city/province semantics across multiple data sources.
+- Required safe fallback logic without overriding high-quality extracted fields.
+
+### What I Learned
+- Property pages can hide critical fields in nested JSON-LD graphs not obvious at first pass.
+- Live user examples are essential for hardening scraper coverage quickly.
+
+### Next Milestone
+- Add optional secondary extraction from visible page widgets for floor area and parking where JSON-LD omits them.
+
+---
+
 ## Entry Template
 
 Copy this section for each new day or milestone:

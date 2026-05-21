@@ -1,0 +1,343 @@
+{
+  "info": {
+    "_postman_id": "d1f31e63-c8ff-4f53-b7f7-e913d4d3f2a9",
+    "name": "under-over API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Postman collection for testing under-over scraper and ingestion endpoints."
+  },
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Health endpoint is OK', function () {",
+              "  pm.response.to.have.status(200);",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scraper",
+      "item": [
+        {
+          "name": "Discover Listing URLs",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"search_url\": \"{{searchUrl}}\",\n  \"limit\": 5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scraper/discover",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scraper",
+                "discover"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Discover call succeeded', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  var json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('ok');",
+                  "});",
+                  "",
+                  "var json = pm.response.json();",
+                  "if (json.urls && json.urls.length > 0) {",
+                  "  pm.collectionVariables.set('discoveredListingUrl', json.urls[0]);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Fetch Raw Listing",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"listing_url\": \"{{discoveredListingUrl}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scraper/fetch",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scraper",
+                "fetch"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Fetch call returned raw payload', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  var json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('ok');",
+                  "  pm.expect(json.raw).to.be.an('object');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Normalize Listing",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"listing_url\": \"{{discoveredListingUrl}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/scraper/normalize",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "scraper",
+                "normalize"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Normalize call returned normalized payload', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  var json = pm.response.json();",
+                  "  pm.expect(json.status).to.eql('ok');",
+                  "  pm.expect(json.normalized).to.be.an('object');",
+                  "  pm.expect(json.missing_critical_fields).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Ingestion",
+      "item": [
+        {
+          "name": "Run Ingestion (Sample Dry Run)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sample_mode\": true,\n  \"write_to_db\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ingestion/run",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ingestion",
+                "run"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Run Ingestion (Live Dry Run)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"search_url\": \"{{searchUrl}}\",\n  \"limit\": 3,\n  \"write_to_db\": false,\n  \"sample_mode\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ingestion/run",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ingestion",
+                "run"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Ingestion Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ingestion/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ingestion",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Ingestion Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ingestion/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ingestion",
+                "summary"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Ingestion Trends (DB required)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/ingestion/trends?limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ingestion",
+                "trends"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Data Quality",
+      "item": [
+        {
+          "name": "Data Quality Report (DB required)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/data-quality/report",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "data-quality",
+                "report"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    },
+    {
+      "key": "searchUrl",
+      "value": "https://www.property24.com/for-sale/gauteng/1"
+    },
+    {
+      "key": "discoveredListingUrl",
+      "value": ""
+    }
+  ]
+}
