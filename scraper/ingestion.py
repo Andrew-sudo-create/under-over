@@ -2,13 +2,9 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from typing import Any, Callable
 
-import psycopg
-
-from api.config import settings
-from db.ingestion_runs import save_ingestion_run
-from db.persistence import persist_listing
-from scraper.base import ListingAdapter, NormalizedListing
+from scraper.base import ListingAdapter, NormalizedListing, RawListing
 from scraper.sample_data import sample_raw_listing
 
 
@@ -32,13 +28,16 @@ class IngestionResult:
         return payload
 
 
+ProgressCallback = Callable[[str, dict[str, Any]], None]
+
+
 def run_ingestion(
     adapter: ListingAdapter,
     *,
     search_url: str | None = None,
     limit: int = 5,
-    write_to_db: bool = False,
     sample_mode: bool = False,
+    progress_callback: ProgressCallback | None = None,
 ) -> IngestionResult:
     started_at = datetime.now(timezone.utc)
     errors: list[str] = []
@@ -46,72 +45,111 @@ def run_ingestion(
     written_count = 0
     discovered_urls: list[str] = []
     normalized_records: list[NormalizedListing] = []
+    _notify(
+        progress_callback,
+        "run_started",
+        {
+            "adapter": adapter.source_name,
+            "search_url": search_url,
+            "limit": limit,
+            "sample_mode": sample_mode,
+            "started_at": started_at.isoformat(),
+        },
+    )
 
     if sample_mode:
         discovered_urls = [sample_raw_listing().listing_url]
+        _notify(
+            progress_callback,
+            "discovery_complete",
+            {"mode": "sample", "discovered_count": len(discovered_urls)},
+        )
     elif search_url:
         try:
+            _notify(
+                progress_callback,
+                "discovery_started",
+                {"search_url": search_url, "limit": limit},
+            )
             discovered_urls = adapter.discover_listing_urls(search_url, limit=limit)
+            _notify(
+                progress_callback,
+                "discovery_complete",
+                {"mode": "live", "discovered_count": len(discovered_urls)},
+            )
         except Exception as exc:  # noqa: BLE001
             errors.append(f"discovery_failed: {exc}")
+            _notify(
+                progress_callback,
+                "discovery_failed",
+                {"error": str(exc)},
+            )
 
-    if write_to_db:
-        conn = psycopg.connect(settings.database_url)
+    if sample_mode:
+        raw = sample_raw_listing()
+        normalized = adapter.normalize_listing(raw)
+        processed_count += 1
+        normalized_records.append(normalized)
+        _notify(
+            progress_callback,
+            "listing_processed",
+            _listing_log_payload(raw, normalized, processed_count, len(discovered_urls)),
+        )
     else:
-        conn = None
+        for listing_url in discovered_urls:
+            try:
+                raw = adapter.fetch_listing(listing_url)
+                normalized = adapter.normalize_listing(raw)
+                processed_count += 1
+                normalized_records.append(normalized)
+                _notify(
+                    progress_callback,
+                    "listing_processed",
+                    _listing_log_payload(raw, normalized, processed_count, len(discovered_urls)),
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"listing_failed: {listing_url} -> {exc}")
+                _notify(
+                    progress_callback,
+                    "listing_failed",
+                    {"listing_url": listing_url, "error": str(exc)},
+                )
 
-    try:
-        if sample_mode:
-            raw = sample_raw_listing()
-            normalized = adapter.normalize_listing(raw)
-            processed_count += 1
-            normalized_records.append(normalized)
-            if conn:
-                persist_listing(conn, raw, normalized)
-                conn.commit()
-                written_count += 1
-        else:
-            for listing_url in discovered_urls:
-                try:
-                    raw = adapter.fetch_listing(listing_url)
-                    normalized = adapter.normalize_listing(raw)
-                    processed_count += 1
-                    normalized_records.append(normalized)
-                    if conn:
-                        persist_listing(conn, raw, normalized)
-                        conn.commit()
-                        written_count += 1
-                except Exception as exc:  # noqa: BLE001
-                    errors.append(f"listing_failed: {listing_url} -> {exc}")
+    quality_summary = _build_quality_summary(
+        discovered_urls=discovered_urls,
+        normalized_records=normalized_records,
+        errors=errors,
+    )
 
-        quality_summary = _build_quality_summary(
-            discovered_urls=discovered_urls,
-            normalized_records=normalized_records,
-            errors=errors,
-        )
+    finished_at = datetime.now(timezone.utc)
+    result = IngestionResult(
+        source=adapter.source_name,
+        mode="sample" if sample_mode else "live",
+        started_at=started_at,
+        finished_at=finished_at,
+        search_url=search_url,
+        discovered_count=len(discovered_urls),
+        processed_count=processed_count,
+        written_count=written_count,
+        errors=errors,
+        quality_summary=quality_summary,
+    )
 
-        finished_at = datetime.now(timezone.utc)
-        result = IngestionResult(
-            source=adapter.source_name,
-            mode="sample" if sample_mode else "live",
-            started_at=started_at,
-            finished_at=finished_at,
-            search_url=search_url,
-            discovered_count=len(discovered_urls),
-            processed_count=processed_count,
-            written_count=written_count,
-            errors=errors,
-            quality_summary=quality_summary,
-        )
-
-        if conn is not None:
-            save_ingestion_run(conn, result)
-            conn.commit()
-
-        return result
-    finally:
-        if conn is not None and not conn.closed:
-            conn.close()
+    _notify(
+        progress_callback,
+        "run_finished",
+        {
+            "source": result.source,
+            "mode": result.mode,
+            "discovered_count": result.discovered_count,
+            "processed_count": result.processed_count,
+            "written_count": result.written_count,
+            "error_count": len(result.errors),
+            "quality_summary": result.quality_summary,
+            "finished_at": finished_at.isoformat(),
+        },
+    )
+    return result
 
 
 def _build_quality_summary(
@@ -145,4 +183,36 @@ def _build_quality_summary(
         "missing_property_type_count": missing_property_type_count,
         "missing_asking_price_count": missing_asking_price_count,
         "missing_critical_count": missing_critical_count,
+    }
+
+
+def _notify(
+    callback: ProgressCallback | None,
+    event: str,
+    payload: dict[str, Any],
+) -> None:
+    if callback is None:
+        return
+    callback(event, payload)
+
+
+def _listing_log_payload(
+    raw: RawListing,
+    normalized: NormalizedListing,
+    processed_count: int,
+    total_discovered: int,
+) -> dict[str, Any]:
+    return {
+        "index": processed_count,
+        "total_discovered": total_discovered,
+        "source_listing_id": raw.source_listing_id,
+        "listing_url": raw.listing_url,
+        "city": normalized.city,
+        "suburb": normalized.suburb,
+        "property_type": normalized.property_type,
+        "bedrooms": normalized.bedrooms,
+        "bathrooms": normalized.bathrooms,
+        "parking_spaces": normalized.parking_spaces,
+        "asking_price": normalized.asking_price,
+        "listed_at": normalized.listed_at.isoformat() if normalized.listed_at else None,
     }

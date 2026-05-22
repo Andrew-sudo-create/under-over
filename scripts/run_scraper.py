@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import argparse
 import json
 import os
 from pathlib import Path
 import sys
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -13,69 +13,83 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scraper.ingestion import run_ingestion
-from scraper.property24 import Property24Adapter
-from scraper.property24_scrapegraph import Property24ScrapeGraphAdapter
+from scraper.property24_camoufox import Property24CamoufoxAdapter
 
-DEFAULT_SEARCH_URL = "https://www.property24.com/for-sale/gauteng/1"
-
-
-def _build_adapter(backend: str):
-    normalized = backend.strip().lower()
-    if normalized == "scrapegraph":
-        return Property24ScrapeGraphAdapter()
-    if normalized == "html":
-        return Property24Adapter()
-    raise ValueError(f"Unsupported backend '{backend}'. Use 'html' or 'scrapegraph'.")
+LOCATION_SEARCH_URLS = {
+    "gauteng": "https://www.property24.com/for-sale/gauteng/1",
+    "cape-town": "https://www.property24.com/for-sale/cape-town/western-cape/432",
+    "johannesburg": "https://www.property24.com/for-sale/johannesburg/gauteng/100",
+    "durban": "https://www.property24.com/for-sale/durban/kwazulu-natal/146",
+    "pretoria": "https://www.property24.com/for-sale/pretoria/gauteng/110",
+}
+DEFAULT_LOCATION = "gauteng"
+DEFAULT_LIMIT = 5
 
 
-def _env_bool(name: str, default: bool = False) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+def _log_event(event: str, payload: dict[str, Any]) -> None:
+    print(f"[scraper:{event}] {json.dumps(payload, ensure_ascii=False)}")
 
 
-def main() -> None:
+def _mask_username(value: str) -> str:
+    if not value:
+        return ""
+    if len(value) <= 4:
+        return "*" * len(value)
+    return f"{value[:4]}***"
+
+
+def _resolve_search_url(location: str, explicit_search_url: str | None) -> str:
+    if explicit_search_url and explicit_search_url.strip():
+        return explicit_search_url.strip()
+    return LOCATION_SEARCH_URLS[location]
+
+
+def main(
+    *,
+    location: str = DEFAULT_LOCATION,
+    limit: int = DEFAULT_LIMIT,
+    search_url_override: str | None = None,
+) -> None:
     load_dotenv()
+    if location not in LOCATION_SEARCH_URLS:
+        valid = ", ".join(sorted(LOCATION_SEARCH_URLS.keys()))
+        raise ValueError(f"Unsupported location '{location}'. Valid options: {valid}")
+    if limit < 1:
+        raise ValueError("limit must be >= 1")
 
-    parser = argparse.ArgumentParser(description="Run the under-over Property24 scraper.")
-    parser.add_argument(
-        "--search-url",
-        default=os.getenv("UNDER_OVER_SEARCH_URL", DEFAULT_SEARCH_URL),
-        help="Property24 search URL. Defaults to .env value or built-in Gauteng URL.",
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=int(os.getenv("UNDER_OVER_SCRAPER_LIMIT", "5")),
-        help="Maximum listing URLs to discover.",
-    )
-    parser.add_argument(
-        "--backend",
-        default=os.getenv("UNDER_OVER_SCRAPER_BACKEND", "scrapegraph"),
-        choices=["html", "scrapegraph"],
-        help="Scraper backend to use.",
-    )
-    parser.add_argument(
-        "--write",
-        action="store_true",
-        default=_env_bool("UNDER_OVER_SCRAPER_WRITE", False),
-        help="Write normalized records to DB.",
-    )
-    parser.add_argument(
-        "--sample-mode",
-        action="store_true",
-        help="Run with sample listing payload (no live scraping).",
-    )
-    args = parser.parse_args()
+    search_url = _resolve_search_url(location, search_url_override)
 
-    adapter = _build_adapter(args.backend)
+    _log_event(
+        "startup",
+        {
+            "backend": "camoufox",
+            "location": location,
+            "search_url": search_url,
+            "limit": limit,
+            "write_to_db": False,
+            "sample_mode": False,
+        },
+    )
+    _log_event(
+        "stealth_connection",
+        {
+            "stealth_package": "stealth-scraping",
+            "proxy_enabled": os.getenv("STEALTH_PROXY_ENABLED", "true"),
+            "proxy_server": os.getenv("STEALTH_PROXY_SERVER", "http://t.pr.thordata.net:9999"),
+            "proxy_username": _mask_username(os.getenv("STEALTH_PROXY_USERNAME", "")),
+        },
+    )
+    adapter = Property24CamoufoxAdapter()
+    _log_event(
+        "adapter_selected",
+        {"adapter_source": adapter.source_name, "requested_backend": "camoufox"},
+    )
     result = run_ingestion(
         adapter,
-        search_url=args.search_url or None,
-        limit=args.limit,
-        write_to_db=args.write,
-        sample_mode=args.sample_mode,
+        search_url=search_url,
+        limit=limit,
+        sample_mode=False,
+        progress_callback=_log_event,
     )
     print(json.dumps(result.to_dict(), indent=2))
 

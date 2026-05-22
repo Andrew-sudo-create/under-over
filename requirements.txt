@@ -1,9 +1,3 @@
-fastapi
-uvicorn[standard]
-pydantic-settings
 python-dotenv
-pytest
 httpx
 beautifulsoup4
-psycopg[binary]
-scrapegraph-py
